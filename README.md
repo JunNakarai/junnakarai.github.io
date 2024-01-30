@@ -1,6 +1,6 @@
 #  ガジェット
 
-##　 デスク 
+##  デスク 
 
 - [デスク環境](https://hrklab.blog/docs/desk/desk.html)
 
