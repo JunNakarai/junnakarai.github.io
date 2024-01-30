@@ -1,2 +1,5 @@
 theme: jekyll-theme-slate
 title: HrkLab
+url: https://hrklab.blog
+baseurl: ""
+permalink: https://hrklab.blog
