@@ -182,8 +182,7 @@
     </div>
 
     <script>
-        // Web Serial API対応FlexiSpotコントローラー
-        class FlexiSpotWebController {
+        // Web Serial API対応FlexiSpotコントローラー        class FlexiSpotWebController {
             constructor() {
                 this.port = null;
                 this.reader = null;
@@ -192,6 +191,7 @@
                 this.currentHeight = 0;
                 this.upInterval = null;
                 this.downInterval = null;
+                this.dataBuffer = []; // データ受信バッファ
                 
                 // FlexiSpotコマンド定義
                 this.commands = {
@@ -286,8 +286,7 @@
                     this.log(`接続エラー: ${error.message}`, 'error');
                 }
             }
-            
-            async disconnect() {
+              async disconnect() {
                 if (this.reader) {
                     await this.reader.cancel();
                     await this.reader.releaseLock();
@@ -302,10 +301,12 @@
                 this.stopMoveUp();
                 this.stopMoveDown();
                 this.isConnected = false;
+                this.dataBuffer = []; // データバッファをクリア
                 
                 document.getElementById('connect-btn').disabled = false;
                 document.getElementById('disconnect-btn').disabled = true;
                 document.getElementById('status-text').textContent = '未接続';
+                document.getElementById('current-height').textContent = '-- cm'; // 高さ表示をリセット
                 
                 this.log('接続を切断しました', 'success');
             }
@@ -323,13 +324,150 @@
                     this.log(`データ受信エラー: ${error.message}`, 'error');
                 }
             }
-            
-            processReceivedData(data) {
-                // 高さデータの処理ロジック（現在のElectronアプリから移植）
+              processReceivedData(data) {
+                // データをバッファに追加
+                if (!this.dataBuffer) {
+                    this.dataBuffer = [];
+                }
+                this.dataBuffer.push(...Array.from(data));
+                
                 this.log(`受信データ: ${Array.from(data).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
                 
-                // 簡易的な高さ表示更新（実際の解析ロジックは既存コードから移植）
-                // this.updateHeightDisplay(parsedHeight);
+                // メッセージを処理
+                while (this.dataBuffer.length >= 6) {
+                    // メッセージ開始を探す (0x9b)
+                    let startIdx = -1;
+                    for (let i = 0; i < this.dataBuffer.length; i++) {
+                        if (this.dataBuffer[i] === 0x9b) {
+                            startIdx = i;
+                            break;
+                        }
+                    }
+
+                    if (startIdx === -1) {
+                        this.dataBuffer = [];
+                        break;
+                    }
+
+                    // 開始前のデータをチェック（高さデータが含まれる場合がある）
+                    if (startIdx > 0) {
+                        const removed = this.dataBuffer.slice(0, startIdx);
+                        if (removed.length >= 8 && removed[0] === 0x07 && removed[1] === 0x12) {
+                            const height = this.parseHeightAlt(removed);
+                            if (height !== null) {
+                                this.updateHeightDisplay(height);
+                                this.log(`高さ更新: ${height} cm`, 'success');
+                            }
+                        }
+                        this.dataBuffer = this.dataBuffer.slice(startIdx);
+                    }
+
+                    if (this.dataBuffer.length < 2) {
+                        break;
+                    }
+
+                    const msgLen = this.dataBuffer[1];
+                    const totalLen = msgLen + 3;
+
+                    if (this.dataBuffer.length < totalLen) {
+                        break;
+                    }
+
+                    // メッセージを抽出
+                    const message = this.dataBuffer.slice(0, totalLen);
+                    this.dataBuffer = this.dataBuffer.slice(totalLen);
+
+                    // 高さデータメッセージをチェック (type 0x12, length 7)
+                    if (message.length >= 9 && message[1] === 0x07 && message[2] === 0x12) {
+                        const height = this.parseHeight(message);
+                        if (height !== null) {
+                            this.updateHeightDisplay(height);
+                            this.log(`高さ更新: ${height} cm`, 'success');
+                        }
+                    }
+                }
+            }
+            
+            // 7セグメントディスプレイ値のデコード
+            decodeSevenSegment(byteVal) {
+                if (byteVal === 0x00) {
+                    return { digit: -1, hasDecimal: false };
+                }
+
+                const binary = byteVal.toString(2).padStart(8, '0');
+                const hasDecimal = binary[0] === '1';
+                const segments = binary.substring(1);
+
+                const patterns = {
+                    '0111111': 0, '0000110': 1, '1011011': 2, '1001111': 3,
+                    '1100110': 4, '1101101': 5, '1111101': 6, '0000111': 7,
+                    '1111111': 8, '1101111': 9
+                };
+
+                const digit = patterns[segments] ?? -1;
+                return { digit, hasDecimal };
+            }
+            
+            // 高さデータの解析（メインフォーマット）
+            parseHeight(message) {
+                if (message.length < 9) {
+                    return null;
+                }
+
+                // 高さの数字は位置3, 4, 5にある
+                const digit1Byte = message[3];
+                const digit2Byte = message[4];
+                const digit3Byte = message[5];
+
+                // 数字をデコード
+                const { digit: digit1, hasDecimal: decimal1 } = this.decodeSevenSegment(digit1Byte);
+                const { digit: digit2, hasDecimal: decimal2 } = this.decodeSevenSegment(digit2Byte);
+                const { digit: digit3, hasDecimal: decimal3 } = this.decodeSevenSegment(digit3Byte);
+
+                // 全ての数字が有効かチェック
+                if ([digit1, digit2, digit3].every(d => d >= 0 && d <= 9)) {
+                    let height = digit1 * 100 + digit2 * 10 + digit3;
+
+                    // 小数点があれば適用
+                    if (decimal1 || decimal2 || decimal3) {
+                        height = height / 10;
+                    }
+
+                    return height;
+                }
+
+                return null;
+            }
+            
+            // 高さデータの解析（代替フォーマット）
+            parseHeightAlt(message) {
+                if (message.length < 8 || message[0] !== 0x07 || message[1] !== 0x12) {
+                    return null;
+                }
+
+                // 高さの数字は位置2, 3, 4にある
+                const digit1Byte = message[2];
+                const digit2Byte = message[3];
+                const digit3Byte = message[4];
+
+                // 数字をデコード
+                const { digit: digit1, hasDecimal: decimal1 } = this.decodeSevenSegment(digit1Byte);
+                const { digit: digit2, hasDecimal: decimal2 } = this.decodeSevenSegment(digit2Byte);
+                const { digit: digit3, hasDecimal: decimal3 } = this.decodeSevenSegment(digit3Byte);
+
+                // 全ての数字が有効かチェック
+                if ([digit1, digit2, digit3].every(d => d >= 0 && d <= 9)) {
+                    let height = digit1 * 100 + digit2 * 10 + digit3;
+
+                    // 小数点があれば適用
+                    if (decimal1 || decimal2 || decimal3) {
+                        height = height / 10;
+                    }
+
+                    return height;
+                }
+
+                return null;
             }
             
             updateHeightDisplay(height) {
