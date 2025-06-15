@@ -1,5 +1,9 @@
 #  概要
 
+## ２０２５
+
+- [🌐 FlexiSpot Web Controller](./flexispot/) - ブラウザからFlexiSpotデスクをコントロール
+
 ## ２０２３ 
 
 - [デスク環境](https://hrklab.blog/docs/desk/desk.html)
