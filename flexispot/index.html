@@ -179,10 +179,9 @@
             <button id="clear-log-btn" class="btn">ログクリア</button>
             <div id="log" class="log"></div>
         </section>
-    </div>
-
-    <script>
-        // Web Serial API対応FlexiSpotコントローラー        class FlexiSpotWebController {
+    </div>    <script>
+        // Web Serial API対応FlexiSpotコントローラー
+        class FlexiSpotWebController {
             constructor() {
                 this.port = null;
                 this.reader = null;
@@ -192,9 +191,10 @@
                 this.upInterval = null;
                 this.downInterval = null;
                 this.dataBuffer = []; // データ受信バッファ
-                
-                // FlexiSpotコマンド定義
+                this.heightMonitoringInterval = null; // 高さ監視インターバル
+                  // FlexiSpotコマンド定義
                 this.commands = {
+                    WAKE_UP: new Uint8Array([0x9b, 0x06, 0x02, 0x00, 0x00, 0x6c, 0xa1, 0x9d]),
                     UP: new Uint8Array([0x9b, 0x06, 0x02, 0x01, 0x00, 0xfc, 0xa0, 0x9d]),
                     DOWN: new Uint8Array([0x9b, 0x06, 0x02, 0x02, 0x00, 0x0c, 0xa0, 0x9d]),
                     PRESET_1: new Uint8Array([0x9b, 0x06, 0x02, 0x04, 0x00, 0xac, 0xa3, 0x9d]),
@@ -276,11 +276,13 @@
                     document.getElementById('connect-btn').disabled = true;
                     document.getElementById('disconnect-btn').disabled = false;
                     document.getElementById('status-text').textContent = '接続済み';
-                    
-                    this.log('FlexiSpotデスクに接続しました', 'success');
+                      this.log('FlexiSpotデスクに接続しました', 'success');
                     
                     // データ受信開始
                     this.startReading();
+                    
+                    // 高さデータ要求を開始
+                    this.startHeightMonitoring();
                     
                 } catch (error) {
                     this.log(`接続エラー: ${error.message}`, 'error');
@@ -297,9 +299,9 @@
                 if (this.port) {
                     await this.port.close();
                 }
-                
-                this.stopMoveUp();
+                  this.stopMoveUp();
                 this.stopMoveDown();
+                this.stopHeightMonitoring(); // 高さ監視を停止
                 this.isConnected = false;
                 this.dataBuffer = []; // データバッファをクリア
                 
@@ -323,17 +325,15 @@
                 } catch (error) {
                     this.log(`データ受信エラー: ${error.message}`, 'error');
                 }
-            }
-              processReceivedData(data) {
+            }              processReceivedData(data) {
                 // データをバッファに追加
                 if (!this.dataBuffer) {
                     this.dataBuffer = [];
                 }
                 this.dataBuffer.push(...Array.from(data));
                 
-                this.log(`受信データ: ${Array.from(data).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
-                
-                // メッセージを処理
+                this.log(`📨 受信データ: ${Array.from(data).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')} (長さ: ${data.length})`, 'info');
+                this.log(`📊 バッファ合計: ${this.dataBuffer.length} bytes`, 'info');
                 while (this.dataBuffer.length >= 6) {
                     // メッセージ開始を探す (0x9b)
                     let startIdx = -1;
@@ -375,15 +375,21 @@
 
                     // メッセージを抽出
                     const message = this.dataBuffer.slice(0, totalLen);
-                    this.dataBuffer = this.dataBuffer.slice(totalLen);
-
+                    this.dataBuffer = this.dataBuffer.slice(totalLen);                    // メッセージの詳細をログ出力
+                    this.log(`🔍 解析中メッセージ: ${message.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`, 'info');
+                    
                     // 高さデータメッセージをチェック (type 0x12, length 7)
                     if (message.length >= 9 && message[1] === 0x07 && message[2] === 0x12) {
+                        this.log(`📏 高さメッセージ検出`, 'info');
                         const height = this.parseHeight(message);
                         if (height !== null) {
                             this.updateHeightDisplay(height);
-                            this.log(`高さ更新: ${height} cm`, 'success');
+                            this.log(`✅ 高さ更新: ${height} cm`, 'success');
+                        } else {
+                            this.log(`❌ 高さパース失敗`, 'warn');
                         }
+                    } else {
+                        this.log(`ℹ️ 他のメッセージタイプ: length=${message[1]}, type=${message[2] ? '0x' + message[2].toString(16) : 'N/A'}`, 'info');
                     }
                 }
             }
@@ -407,36 +413,47 @@
                 const digit = patterns[segments] ?? -1;
                 return { digit, hasDecimal };
             }
-            
-            // 高さデータの解析（メインフォーマット）
+              // 高さデータの解析（メインフォーマット）
             parseHeight(message) {
                 if (message.length < 9) {
+                    this.log(`❌ メッセージが短すぎます: ${message.length} < 9`, 'warn');
                     return null;
                 }
 
-                // 高さの数字は位置3, 4, 5にある
-                const digit1Byte = message[3];
-                const digit2Byte = message[4];
-                const digit3Byte = message[5];
+                // 高さの数字は位置3から6にある（4バイト）
+                const heightBytes = message.slice(3, 7);
+                this.log(`📊 高さバイト: ${heightBytes.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`, 'info');
 
-                // 数字をデコード
-                const { digit: digit1, hasDecimal: decimal1 } = this.decodeSevenSegment(digit1Byte);
-                const { digit: digit2, hasDecimal: decimal2 } = this.decodeSevenSegment(digit2Byte);
-                const { digit: digit3, hasDecimal: decimal3 } = this.decodeSevenSegment(digit3Byte);
+                const digits = [];
+                let decimalPosition = -1;
 
-                // 全ての数字が有効かチェック
-                if ([digit1, digit2, digit3].every(d => d >= 0 && d <= 9)) {
-                    let height = digit1 * 100 + digit2 * 10 + digit3;
-
-                    // 小数点があれば適用
-                    if (decimal1 || decimal2 || decimal3) {
-                        height = height / 10;
+                // 各バイトを7セグメントデコード
+                for (let i = 0; i < heightBytes.length; i++) {
+                    const decoded = this.decodeSevenSegment(heightBytes[i]);
+                    this.log(`🔢 位置${i}: 0x${heightBytes[i].toString(16).padStart(2, '0')} -> 数字:${decoded.digit}, 小数点:${decoded.hasDecimal}`, 'info');
+                    
+                    if (decoded.digit !== null && decoded.digit !== -1) {
+                        digits.push(decoded.digit);
+                        if (decoded.hasDecimal) {
+                            decimalPosition = digits.length - 1;
+                        }
                     }
-
-                    return height;
                 }
 
-                return null;
+                if (digits.length === 0) {
+                    this.log(`❌ 有効な数字が見つかりません`, 'warn');
+                    return null;
+                }
+
+                // 数字を結合
+                let heightStr = digits.join('');
+                
+                // 小数点を挿入
+                if (decimalPosition >= 0 && decimalPosition < heightStr.length - 1) {
+                    heightStr = heightStr.substring(0, decimalPosition + 1) + '.' + heightStr.substring(decimalPosition + 1);
+                }                const height = parseFloat(heightStr);
+                this.log(`🎯 解析結果: ${heightStr} -> ${height}`, height ? 'success' : 'warn');
+                return isNaN(height) ? null : height;
             }
             
             // 高さデータの解析（代替フォーマット）
@@ -545,10 +562,39 @@
                 logDiv.appendChild(entry);
                 logDiv.scrollTop = logDiv.scrollHeight;
             }
-            
-            clearLog() {
+              clearLog() {
                 document.getElementById('log').innerHTML = '';
                 this.log('ログをクリアしました');
+            }
+            
+            // 高さ監視開始（定期的にウェイクアップコマンドを送信）
+            startHeightMonitoring() {
+                if (this.heightMonitoringInterval) {
+                    clearInterval(this.heightMonitoringInterval);
+                }
+                
+                // 接続直後に一度ウェイクアップ送信
+                setTimeout(() => {
+                    this.sendCommand(this.commands.WAKE_UP);
+                    this.log('高さデータ要求を送信しました', 'success');
+                }, 1000);
+                
+                // 5秒ごとにウェイクアップコマンドを送信して高さデータを要求
+                this.heightMonitoringInterval = setInterval(() => {
+                    if (this.isConnected) {
+                        this.sendCommand(this.commands.WAKE_UP);
+                        this.log('高さデータ要求を送信中...', 'success');
+                    }
+                }, 5000);
+            }
+            
+            // 高さ監視停止
+            stopHeightMonitoring() {
+                if (this.heightMonitoringInterval) {
+                    clearInterval(this.heightMonitoringInterval);
+                    this.heightMonitoringInterval = null;
+                    this.log('高さ監視を停止しました');
+                }
             }
         }
         
