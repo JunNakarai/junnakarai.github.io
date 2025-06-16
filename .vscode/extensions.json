@@ -1,0 +1,33 @@
+{
+    "recommendations": [
+        // GitHub Copilot関連
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        // 基本的な開発拡張機能
+        "ms-vscode.vscode-typescript-next",
+        "bradlc.vscode-tailwindcss",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-json",
+        // HTML/CSS関連
+        "formulahendry.auto-rename-tag",
+        "formulahendry.auto-close-tag",
+        "bradlc.vscode-tailwindcss",
+        // JavaScript/Node.js関連
+        "ms-vscode.vscode-node-azure-pack",
+        "ms-vscode.vscode-eslint",
+        // Markdown関連
+        "yzhang.markdown-all-in-one",
+        "DavidAnson.vscode-markdownlint",
+        // Git関連
+        "eamodio.gitlens",
+        "vivaxy.vscode-conventional-commits",
+        // その他便利な拡張機能
+        "ms-vscode.live-server",
+        "ms-vscode.vscode-json",
+        "ms-vscode.hexeditor",
+        "Gruntfuggly.todo-tree",
+        "aaron-bond.better-comments",
+        // テーマ（オプション）
+        "GitHub.github-vscode-theme"
+    ]
+}
