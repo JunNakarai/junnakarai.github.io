@@ -159,7 +159,7 @@
             <div class="height-display">
                 現在の高さ: <span id="current-height">-- cm</span>
             </div>
-            
+
             <div class="preset-buttons">
                 <button class="btn" id="preset-1">プリセット 1</button>
                 <button class="btn" id="preset-2">プリセット 2</button>
@@ -171,15 +171,30 @@
                 <button id="up-btn" class="btn btn-control">▲ 上げる</button>
                 <button id="down-btn" class="btn btn-control">▼ 下げる</button>
             </div>
-        </section>
-
-        <!-- ログ -->
+        </section>        <!-- ログ -->
         <section class="section">
             <h2>ログ</h2>
             <button id="clear-log-btn" class="btn">ログクリア</button>
             <div id="log" class="log"></div>
+        </section>        <!-- デバッグセクション -->
+        <section class="section">
+            <h2>🔧 デバッグ機能</h2>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0;">
+                <button id="debug-wake1" class="btn">WAKE_UP</button>
+                <button id="debug-status" class="btn">接続状態確認</button>
+            </div>
+            <div style="margin-top: 10px;">
+                <label>監視間隔: </label>
+                <select id="monitor-interval">
+                    <option value="1000">1秒</option>
+                    <option value="2000" selected>2秒</option>
+                    <option value="5000">5秒</option>
+                    <option value="10000">10秒</option>
+                </select>
+                <button id="update-interval" class="btn">間隔更新</button>
+            </div>
         </section>
-    </div>    <script>
+    </div><script>
         // Web Serial API対応FlexiSpotコントローラー
         class FlexiSpotWebController {
             constructor() {
@@ -191,8 +206,7 @@
                 this.upInterval = null;
                 this.downInterval = null;
                 this.dataBuffer = []; // データ受信バッファ
-                this.heightMonitoringInterval = null; // 高さ監視インターバル
-                  // FlexiSpotコマンド定義
+                this.heightMonitoringInterval = null; // 高さ監視インターバル                // FlexiSpotコマンド定義
                 this.commands = {
                     WAKE_UP: new Uint8Array([0x9b, 0x06, 0x02, 0x00, 0x00, 0x6c, 0xa1, 0x9d]),
                     UP: new Uint8Array([0x9b, 0x06, 0x02, 0x01, 0x00, 0xfc, 0xa0, 0x9d]),
@@ -202,11 +216,11 @@
                     PRESET_3: new Uint8Array([0x9b, 0x06, 0x02, 0x10, 0x00, 0xac, 0xac, 0x9d]),
                     PRESET_4: new Uint8Array([0x9b, 0x06, 0x02, 0x00, 0x01, 0xac, 0x60, 0x9d])
                 };
-                
+
                 this.initializeUI();
                 this.checkBrowserSupport();
             }
-            
+
             checkBrowserSupport() {
                 const checkDiv = document.getElementById('browser-check');
                 if ('serial' in navigator) {
@@ -217,73 +231,88 @@
                     checkDiv.innerHTML = '<strong>❌ ブラウザ未対応</strong><br>Chrome 89+またはEdge 89+をお使いください。FirefoxやSafariは現在対応していません。';
                 }
             }
-            
+
             initializeUI() {
                 // 接続ボタン
                 document.getElementById('connect-btn').addEventListener('click', () => this.connect());
                 document.getElementById('disconnect-btn').addEventListener('click', () => this.disconnect());
-                
+
                 // プリセットボタン
                 for (let i = 1; i <= 4; i++) {
                     document.getElementById(`preset-${i}`).addEventListener('click', () => this.setPreset(i));
                 }
-                
+
                 // 上下ボタン（長押し対応）
                 const upBtn = document.getElementById('up-btn');
                 const downBtn = document.getElementById('down-btn');
-                
+
                 // 上ボタン
                 upBtn.addEventListener('mousedown', () => this.startMoveUp());
                 upBtn.addEventListener('mouseup', () => this.stopMoveUp());
                 upBtn.addEventListener('mouseleave', () => this.stopMoveUp());
                 upBtn.addEventListener('touchstart', () => this.startMoveUp());
                 upBtn.addEventListener('touchend', () => this.stopMoveUp());
-                
+
                 // 下ボタン
                 downBtn.addEventListener('mousedown', () => this.startMoveDown());
                 downBtn.addEventListener('mouseup', () => this.stopMoveDown());
                 downBtn.addEventListener('mouseleave', () => this.stopMoveDown());
                 downBtn.addEventListener('touchstart', () => this.startMoveDown());
                 downBtn.addEventListener('touchend', () => this.stopMoveDown());
-                
-                // ログクリアボタン
+                  // ログクリアボタン
                 document.getElementById('clear-log-btn').addEventListener('click', () => this.clearLog());
+                  // デバッグボタン
+                document.getElementById('debug-wake1').addEventListener('click', () => {
+                    this.sendCommand(this.commands.WAKE_UP);
+                    this.log('🔧 デバッグ: WAKE_UP送信', 'info');
+                });
+                document.getElementById('debug-status').addEventListener('click', () => {
+                    this.log(`🔧 デバッグ: 接続状態=${this.isConnected}, 高さ=${this.currentHeight}cm`, 'info');
+                });
+                document.getElementById('update-interval').addEventListener('click', () => {
+                    const interval = parseInt(document.getElementById('monitor-interval').value);
+                    this.updateMonitoringInterval(interval);
+                });
             }
-            
-            async connect() {
+              async connect() {
                 if (!('serial' in navigator)) {
                     this.log('Web Serial APIがサポートされていません', 'error');
                     return;
                 }
-                
+
                 try {
                     // ポート選択
                     this.port = await navigator.serial.requestPort();
-                    
+
                     // ポート開く（FlexiSpotの設定に合わせて）
                     await this.port.open({
                         baudRate: 9600,
                         dataBits: 8,
                         stopBits: 1,
-                        parity: 'none'
+                        parity: 'none',
+                        bufferSize: 1024,  // バッファサイズを明示的に設定
+                        flowControl: 'none'  // フロー制御を無効化
                     });
-                    
+
+                    // 短時間待機してポートを安定させる
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
                     this.reader = this.port.readable.getReader();
                     this.writer = this.port.writable.getWriter();
                     this.isConnected = true;
-                    
+
                     // UI更新
                     document.getElementById('connect-btn').disabled = true;
                     document.getElementById('disconnect-btn').disabled = false;
                     document.getElementById('status-text').textContent = '接続済み';
-                      this.log('FlexiSpotデスクに接続しました', 'success');
-                    
+                    this.log('FlexiSpotデスクに接続しました', 'success');
+
                     // データ受信開始
                     this.startReading();
-                    
-                    // 高さデータ要求を開始
-                    this.startHeightMonitoring();
-                    
+
+                    // 初期化シーケンスを実行
+                    this.initializeDesk();
+
                 } catch (error) {
                     this.log(`接続エラー: ${error.message}`, 'error');
                 }
@@ -304,21 +333,21 @@
                 this.stopHeightMonitoring(); // 高さ監視を停止
                 this.isConnected = false;
                 this.dataBuffer = []; // データバッファをクリア
-                
+
                 document.getElementById('connect-btn').disabled = false;
                 document.getElementById('disconnect-btn').disabled = true;
                 document.getElementById('status-text').textContent = '未接続';
                 document.getElementById('current-height').textContent = '-- cm'; // 高さ表示をリセット
-                
+
                 this.log('接続を切断しました', 'success');
             }
-            
+
             async startReading() {
                 try {
                     while (this.port.readable) {
                         const { value, done } = await this.reader.read();
                         if (done) break;
-                        
+
                         // FlexiSpotからのデータ処理
                         this.processReceivedData(value);
                     }
@@ -331,7 +360,7 @@
                     this.dataBuffer = [];
                 }
                 this.dataBuffer.push(...Array.from(data));
-                
+
                 this.log(`📨 受信データ: ${Array.from(data).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')} (長さ: ${data.length})`, 'info');
                 this.log(`📊 バッファ合計: ${this.dataBuffer.length} bytes`, 'info');
                 while (this.dataBuffer.length >= 6) {
@@ -377,7 +406,7 @@
                     const message = this.dataBuffer.slice(0, totalLen);
                     this.dataBuffer = this.dataBuffer.slice(totalLen);                    // メッセージの詳細をログ出力
                     this.log(`🔍 解析中メッセージ: ${message.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`, 'info');
-                    
+
                     // 高さデータメッセージをチェック (type 0x12, length 7)
                     if (message.length >= 9 && message[1] === 0x07 && message[2] === 0x12) {
                         this.log(`📏 高さメッセージ検出`, 'info');
@@ -387,13 +416,21 @@
                             this.log(`✅ 高さ更新: ${height} cm`, 'success');
                         } else {
                             this.log(`❌ 高さパース失敗`, 'warn');
-                        }
+                        }                    } else if (message.length >= 7 && message[1] === 0x04 && message[2] === 0x11) {
+                        // メッセージタイプ0x11の解析
+                        this.log(`🔍 タイプ0x11メッセージ検出`, 'info');
+                        this.parseMessage0x11(message);
                     } else {
                         this.log(`ℹ️ 他のメッセージタイプ: length=${message[1]}, type=${message[2] ? '0x' + message[2].toString(16) : 'N/A'}`, 'info');
+                        // 受信したメッセージの詳細をログ出力
+                        if (message.length > 3) {
+                            const dataBytes = message.slice(3, -1);
+                            this.log(`📋 メッセージデータ: ${dataBytes.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`, 'info');
+                        }
                     }
                 }
             }
-            
+
             // 7セグメントディスプレイ値のデコード
             decodeSevenSegment(byteVal) {
                 if (byteVal === 0x00) {
@@ -431,7 +468,7 @@
                 for (let i = 0; i < heightBytes.length; i++) {
                     const decoded = this.decodeSevenSegment(heightBytes[i]);
                     this.log(`🔢 位置${i}: 0x${heightBytes[i].toString(16).padStart(2, '0')} -> 数字:${decoded.digit}, 小数点:${decoded.hasDecimal}`, 'info');
-                    
+
                     if (decoded.digit !== null && decoded.digit !== -1) {
                         digits.push(decoded.digit);
                         if (decoded.hasDecimal) {
@@ -447,7 +484,7 @@
 
                 // 数字を結合
                 let heightStr = digits.join('');
-                
+
                 // 小数点を挿入
                 if (decimalPosition >= 0 && decimalPosition < heightStr.length - 1) {
                     heightStr = heightStr.substring(0, decimalPosition + 1) + '.' + heightStr.substring(decimalPosition + 1);
@@ -455,7 +492,7 @@
                 this.log(`🎯 解析結果: ${heightStr} -> ${height}`, height ? 'success' : 'warn');
                 return isNaN(height) ? null : height;
             }
-            
+
             // 高さデータの解析（代替フォーマット）
             parseHeightAlt(message) {
                 if (message.length < 8 || message[0] !== 0x07 || message[1] !== 0x12) {
@@ -486,18 +523,18 @@
 
                 return null;
             }
-            
+
             updateHeightDisplay(height) {
                 this.currentHeight = height;
                 document.getElementById('current-height').textContent = `${height} cm`;
             }
-            
+
             async sendCommand(command) {
                 if (!this.isConnected || !this.writer) {
                     this.log('デスクに接続してください', 'error');
                     return;
                 }
-                
+
                 try {
                     await this.writer.write(command);
                     this.log(`コマンド送信: ${Array.from(command).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
@@ -505,7 +542,7 @@
                     this.log(`コマンド送信エラー: ${error.message}`, 'error');
                 }
             }
-            
+
             async setPreset(presetNumber) {
                 const command = this.commands[`PRESET_${presetNumber}`];
                 if (command) {
@@ -513,10 +550,10 @@
                     this.log(`プリセット${presetNumber}を実行しました`, 'success');
                 }
             }
-            
+
             startMoveUp() {
                 if (this.upInterval) return;
-                
+
                 document.getElementById('up-btn').classList.add('pressing');
                 this.sendCommand(this.commands.UP);
                 this.upInterval = setInterval(() => {
@@ -524,7 +561,7 @@
                 }, 400);
                 this.log('デスクを上昇中...', 'success');
             }
-            
+
             stopMoveUp() {
                 if (this.upInterval) {
                     clearInterval(this.upInterval);
@@ -533,10 +570,10 @@
                     this.log('上昇を停止しました');
                 }
             }
-            
+
             startMoveDown() {
                 if (this.downInterval) return;
-                
+
                 document.getElementById('down-btn').classList.add('pressing');
                 this.sendCommand(this.commands.DOWN);
                 this.downInterval = setInterval(() => {
@@ -544,7 +581,7 @@
                 }, 400);
                 this.log('デスクを下降中...', 'success');
             }
-            
+
             stopMoveDown() {
                 if (this.downInterval) {
                     clearInterval(this.downInterval);
@@ -553,7 +590,7 @@
                     this.log('下降を停止しました');
                 }
             }
-            
+
             log(message, type = 'info') {
                 const logDiv = document.getElementById('log');
                 const entry = document.createElement('div');
@@ -565,29 +602,44 @@
               clearLog() {
                 document.getElementById('log').innerHTML = '';
                 this.log('ログをクリアしました');
+            }            // デスクの初期化シーケンス
+            async initializeDesk() {
+                this.log('🔧 デスクを初期化中...', 'info');
+
+                // 1. 少し待機
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // 2. 標準のウェイクアップコマンドのみ送信
+                await this.sendCommand(this.commands.WAKE_UP);
+                this.log('🔔 WAKE_UP送信', 'info');
+
+                // 3. 高さ監視を開始
+                setTimeout(() => {
+                    this.startHeightMonitoring();
+                }, 1000);
             }
-            
+
             // 高さ監視開始（定期的にウェイクアップコマンドを送信）
             startHeightMonitoring() {
                 if (this.heightMonitoringInterval) {
                     clearInterval(this.heightMonitoringInterval);
                 }
-                
+
                 // 接続直後に一度ウェイクアップ送信
                 setTimeout(() => {
                     this.sendCommand(this.commands.WAKE_UP);
-                    this.log('高さデータ要求を送信しました', 'success');
-                }, 1000);
-                
-                // 5秒ごとにウェイクアップコマンドを送信して高さデータを要求
+                    this.log('🔔 高さデータ要求を送信しました', 'info');
+                }, 500);
+
+                // 2秒ごとにウェイクアップコマンドを送信して高さデータを要求（頻度を上げる）
                 this.heightMonitoringInterval = setInterval(() => {
                     if (this.isConnected) {
                         this.sendCommand(this.commands.WAKE_UP);
-                        this.log('高さデータ要求を送信中...', 'success');
+                        this.log('🔄 高さデータ要求を送信中...', 'info');
                     }
-                }, 5000);
+                }, 2000); // 5秒から2秒に短縮
             }
-            
+
             // 高さ監視停止
             stopHeightMonitoring() {
                 if (this.heightMonitoringInterval) {
@@ -596,8 +648,40 @@
                     this.log('高さ監視を停止しました');
                 }
             }
+
+            // メッセージタイプ0x11の解析
+            parseMessage0x11(message) {
+                if (message.length < 7) return;
+
+                const data = message.slice(3, -1); // データ部分を抽出
+                this.log(`🔍 0x11メッセージデータ: ${data.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`, 'info');
+
+                // データ部分を解析してみる
+                if (data.length === 2) {
+                    const value1 = data[0];
+                    const value2 = data[1];
+                    this.log(`📊 0x11データ解析: value1=0x${value1.toString(16)}, value2=0x${value2.toString(16)}`, 'info');
+
+                    // 状態情報の可能性があるのでログに記録
+                    this.log(`ℹ️ デスク状態: ${value1}, ${value2}`, 'info');
+                }
+            }
+
+            // 監視間隔を更新
+            updateMonitoringInterval(newInterval) {
+                this.log(`🔄 監視間隔を${newInterval}msに変更`, 'info');
+                if (this.heightMonitoringInterval) {
+                    clearInterval(this.heightMonitoringInterval);
+                    this.heightMonitoringInterval = setInterval(() => {
+                        if (this.isConnected) {
+                            this.sendCommand(this.commands.WAKE_UP);
+                            this.log('🔄 高さデータ要求を送信中...', 'info');
+                        }
+                    }, newInterval);
+                }
+            }
         }
-        
+
         // アプリケーション開始
         document.addEventListener('DOMContentLoaded', () => {
             new FlexiSpotWebController();
