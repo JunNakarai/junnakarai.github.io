@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlexiSpot Web Controller</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🌐 FlexiSpot Web Controller</h1>
+            <p class="subtitle">ブラウザからデスクの高さをコントロール</p>
+        </header>
+
+        <!-- ブラウザ対応状況 -->
+        <div id="browser-check" class="browser-check">
+            <strong>ブラウザ対応状況をチェック中...</strong>
+        </div>
+
+        <!-- 接続セクション -->
+        <section class="section">
+            <h2>デバイス接続</h2>
+            <button id="connect-btn" class="btn">FlexiSpotデスクに接続</button>
+            <button id="disconnect-btn" class="btn btn-danger" disabled>切断</button>
+            <div id="connection-status" style="margin-top: 10px;">
+                状態: <span id="status-text">未接続</span>
+            </div>
+        </section>
+
+        <!-- デスクコントロール -->
+        <section class="section">
+            <h2>デスクコントロール</h2>
+            <div class="height-display">
+                現在の高さ: <span id="current-height">-- cm</span>
+            </div>
+
+            <div class="preset-buttons">
+                <button class="btn" id="preset-1">プリセット 1</button>
+                <button class="btn" id="preset-2">プリセット 2</button>
+                <button class="btn" id="preset-3">プリセット 3</button>
+                <button class="btn" id="preset-4">プリセット 4</button>
+            </div>
+
+            <div class="controls">
+                <button id="up-btn" class="btn btn-control">▲ 上げる</button>
+                <button id="down-btn" class="btn btn-control">▼ 下げる</button>
+            </div>
+        </section>
+
+        <!-- ログ -->
+        <section class="section">
+            <h2>ログ</h2>
+            <button id="clear-log-btn" class="btn">ログクリア</button>
+            <div id="log" class="log"></div>
+        </section>
+
+        <!-- デバッグセクション -->
+        <section class="section">
+            <h2>🔧 デバッグ機能</h2>
+            <div class="debug-controls">
+                <button id="debug-wake1" class="btn">WAKE_UP</button>
+                <button id="debug-status" class="btn">接続状態確認</button>
+            </div>
+            <div class="interval-controls">
+                <label>監視間隔: </label>
+                <select id="monitor-interval">
+                    <option value="1000">1秒</option>
+                    <option value="2000" selected>2秒</option>
+                    <option value="5000">5秒</option>
+                    <option value="10000">10秒</option>
+                </select>
+                <button id="update-interval" class="btn">間隔更新</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- JavaScript modules -->
+    <script src="js/serial.js"></script>
+    <script src="js/control.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
