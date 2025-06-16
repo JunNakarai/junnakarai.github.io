@@ -1,0 +1,48 @@
+{
+    // GitHub Copilot設定
+    "github.copilot.enable": {
+        "*": true,
+        "yaml": true,
+        "plaintext": true,
+        "markdown": true,
+        "javascript": true,
+        "html": true,
+        "css": true,
+        "json": true
+    },
+    "github.copilot.advanced": {},
+    "github.copilot.chat.welcomeMessage": "never",
+    // エディタ設定（GitHub Copilotの提案がより良く表示されるように）
+    "editor.inlineSuggest.enabled": true,
+    "editor.suggest.preview": true,
+    "editor.acceptSuggestionOnCommitCharacter": false,
+    "editor.acceptSuggestionOnEnter": "on",
+    "editor.quickSuggestions": {
+        "other": true,
+        "comments": true,
+        "strings": true
+    },
+    // フォーマット設定
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit"
+    },
+    // JavaScript/HTML固有設定
+    "javascript.suggest.autoImports": true,
+    "html.format.enable": true,
+    "html.format.indentInnerHtml": true,
+    "html.format.wrapLineLength": 120,
+    // ファイル関連設定
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    // 言語設定
+    "files.associations": {
+        "*.js": "javascript",
+        "*.html": "html",
+        "*.css": "css",
+        "*.md": "markdown"
+    }
+}
