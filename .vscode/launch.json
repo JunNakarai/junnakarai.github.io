@@ -1,0 +1,8 @@
+{
+    "type": "node",
+    "request": "launch",
+    "name": "Debug Height Test",
+    "program": "${workspaceFolder}/flexispot/height-test.js",
+    "console": "integratedTerminal",
+    "internalConsoleOptions": "neverOpen"
+}
