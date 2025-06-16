@@ -1,10 +1,10 @@
-#  概要
+# 概要
 
-## ２０２５
+## プロジェクト
 
-- [🌐 FlexiSpot Web Controller](./flexispot/) - ブラウザからFlexiSpotデスクをコントロール
+- [🌐 FlexiSpot Web Controller](https://junnakarai.github.io/flexispot-web-controller/)
 
-## ２０２３ 
+## ２０２３
 
 - [デスク環境](https://hrklab.blog/docs/desk/desk.html)
 - [keyball39 マウスレイヤー改造](https://hrklab.blog/docs/keyball/keyball39/keyballMouseLayer.html)
